@@ -7,7 +7,7 @@ import UploadRequiredModal from '../components/UploadRequiredModal';
 import UploadSection from '../components/UploadSection';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useAuth } from '../context/AuthContext';
-import { downloadReport } from '../services/api';
+import { createReport } from '../services/reportApi';
 import { requireImageUpload } from '../utils/requireImageUpload';
 
 const featureCards = [
@@ -52,7 +52,11 @@ export default function Home() {
     imageName,
     setImageFile,
     clearImage,
-    reportAvailable,
+    classificationResult,
+    lesionResult,
+    gradCamResults,
+    gradCamCombined,
+    gradCamStatus,
     analysisHistory,
     historyError,
   } = useAnalysis();
@@ -93,25 +97,24 @@ export default function Home() {
     document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleDownloadReport = async () => {
-    if (!uploadedImage) {
-      setModalFeature('Download Report');
-      setModalOpen(true);
+  const reportReady = Boolean(uploadedImage && classificationResult && lesionResult && gradCamStatus === 'ready' && gradCamCombined && gradCamResults.length === 4);
+
+  const handleViewReport = async () => {
+    if (!reportReady) {
+      setUploadError('Please complete the full retinal analysis before viewing the medical report.');
       return;
     }
-
     try {
       setIsDownloading(true);
-      const result = await downloadReport();
-      const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = result.fileName;
-      link.click();
-      URL.revokeObjectURL(url);
+      const report = await createReport({
+        image: uploadedImage,
+        classification: classificationResult,
+        lesions: lesionResult,
+        gradcam: { combined: gradCamCombined, panels: gradCamResults },
+      });
+      navigate(`/report/${report.analysis_id}`);
     } catch (error) {
-      setUploadError('Something went wrong while processing the image. Please try again.');
+      setUploadError(error.message || 'Unable to prepare the medical report.');
     } finally {
       setIsDownloading(false);
     }
@@ -202,9 +205,9 @@ export default function Home() {
 
         <section className="mt-10">
           <ReportDownload
-            onDownload={handleDownloadReport}
+            onView={handleViewReport}
             isLoading={isDownloading}
-            isReady={Boolean(uploadedImage) && reportAvailable}
+            isReady={reportReady}
           />
         </section>
 

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Footer from './components/Footer';
+import ChatbotWidget from './components/chatbot/ChatbotWidget';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AnalysisProvider } from './context/AnalysisContext';
@@ -9,6 +10,7 @@ import GradCAM from './pages/GradCAM';
 import Home from './pages/Home';
 import LesionDetection from './pages/LesionDetection';
 import Login from './pages/Login';
+import MedicalReportPreview from './pages/MedicalReportPreview';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
 
@@ -69,9 +71,18 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/report/:analysisId"
+            element={
+              <ProtectedRoute>
+                <MedicalReportPreview />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </main>
       {!isAuthPage && <Footer />}
+      {!isAuthPage && <ChatbotWidget />}
     </>
   );
 }

@@ -11,6 +11,7 @@ export function AnalysisProvider({ children }) {
   const [imageName, setImageName] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [classificationResult, setClassificationResult] = useState(null);
+  const [lesionResult, setLesionResult] = useState(null);
   const [gradCamResults, setGradCamResults] = useState([]);
   const [gradCamCombined, setGradCamCombined] = useState('');
   const [gradCamStatus, setGradCamStatus] = useState('idle');
@@ -43,6 +44,7 @@ export function AnalysisProvider({ children }) {
     setImageName(file.name);
     setImagePreview(previewUrl);
     setClassificationResult(null);
+    setLesionResult(null);
     setGradCamResults([]);
     setGradCamCombined('');
     setGradCamStatus('classifying');
@@ -113,6 +115,7 @@ export function AnalysisProvider({ children }) {
       imageName,
       imagePreview,
       classificationResult,
+      lesionResult,
       gradCamResults,
       gradCamCombined,
       gradCamStatus,
@@ -123,10 +126,11 @@ export function AnalysisProvider({ children }) {
       setImageFile,
       clearImage,
       setClassificationResult,
+      setLesionResult,
       setGradCamResults,
       setReportAvailable,
     }),
-    [uploadedImage, imageName, imagePreview, classificationResult, gradCamResults, gradCamCombined, gradCamStatus, gradCamError, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
+    [uploadedImage, imageName, imagePreview, classificationResult, lesionResult, gradCamResults, gradCamCombined, gradCamStatus, gradCamError, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
   );
 
   return <AnalysisContext.Provider value={value}>{children}</AnalysisContext.Provider>;

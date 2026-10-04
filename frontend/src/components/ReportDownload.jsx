@@ -1,12 +1,12 @@
-import { Download } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
-export default function ReportDownload({ onDownload, isLoading = false, isReady = false }) {
+export default function ReportDownload({ onView, isLoading = false, isReady = false }) {
   return (
     <div className="medical-card p-6 sm:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="section-label">Medical Report</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Download Medical Report</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Medical Analysis Report</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Generate and download a report containing the analysis results and visualizations.
           </p>
@@ -14,12 +14,12 @@ export default function ReportDownload({ onDownload, isLoading = false, isReady 
 
         <button
           type="button"
-          onClick={onDownload}
+          onClick={onView}
           disabled={!isReady || isLoading}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          {isLoading ? 'Generating Report...' : 'Download Report'}
+          <FileText className="h-4 w-4" aria-hidden="true" />
+          {isLoading ? 'Preparing Report...' : isReady ? 'View Medical Report' : 'Complete Analysis First'}
         </button>
       </div>
 

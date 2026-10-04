@@ -1,44 +1,24 @@
-import {
-  addDoc,
-  collection,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  where,
-} from 'firebase/firestore';
-import { firestore } from './firebase';
-
-const analysesCollection = collection(firestore, 'analyses');
+import { onValue, push, query, ref, orderByChild, set } from 'firebase/database';
+import { realtimeDb } from './firebase';
 
 export function subscribeToUserAnalyses(userId, onChange, onError) {
-  const analysesQuery = query(analysesCollection, where('userId', '==', String(userId)));
+  const analysesQuery = query(ref(realtimeDb, `analyses/${String(userId)}`), orderByChild('createdAt'));
 
-  return onSnapshot(
-    analysesQuery,
-    (snapshot) => {
-      const analyses = snapshot.docs
-        .map((document) => {
-          const data = document.data();
-          return {
-            id: document.id,
-            ...data,
-            createdAt: data.createdAt?.toDate?.()?.toISOString() || data.uploadedAt,
-          };
-        })
-        .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
-
-      onChange(analyses);
-    },
-    onError,
-  );
+  return onValue(analysesQuery, (snapshot) => {
+    const analyses = Object.entries(snapshot.val() || {})
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
+    onChange(analyses);
+  }, onError);
 }
 
 export function saveAnalysis({ userId, userEmail, image }) {
-  return addDoc(analysesCollection, {
+  const analysisRef = push(ref(realtimeDb, `analyses/${String(userId)}`));
+  return set(analysisRef, {
     userId: String(userId),
     userEmail,
     image,
     uploadedAt: new Date().toISOString(),
-    createdAt: serverTimestamp(),
+    createdAt: new Date().toISOString(),
   });
 }

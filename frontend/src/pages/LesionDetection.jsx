@@ -5,7 +5,7 @@ import { useAnalysis } from '../context/AnalysisContext';
 import { detectLesions } from '../services/api';
 
 export default function LesionDetection() {
-  const { uploadedImage } = useAnalysis();
+  const { uploadedImage, setLesionResult } = useAnalysis();
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,10 @@ export default function LesionDetection() {
     setError('');
     detectLesions(uploadedImage)
       .then((response) => {
-        if (isCurrent) setResult(response.result);
+        if (isCurrent) {
+          setResult(response.result);
+          setLesionResult(response.result);
+        }
       })
       .catch((requestError) => {
         if (isCurrent) setError(requestError.message || 'Lesion detection could not be completed.');
@@ -32,7 +35,7 @@ export default function LesionDetection() {
     return () => {
       isCurrent = false;
     };
-  }, [uploadedImage]);
+  }, [uploadedImage, setLesionResult]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
