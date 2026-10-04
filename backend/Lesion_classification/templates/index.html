@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-Based Diabetic Retinopathy Lesion Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">AI</span><span>Retina Insight</span></a>
+      <span class="model-status"><span class="status-dot"></span> YOLO26s · {{ device|default('auto') }}</span>
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">Retinal image analysis / 01</p>
+      <h1>Map the details<br><em>inside the retina.</em></h1>
+      <p class="lede">Upload a retinal fundus image to detect retinal lesions using a trained YOLO model.</p>
+    </section>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts" aria-live="polite">
+          {% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="workspace">
+      <form class="upload-panel" action="{{ url_for('predict') }}" method="post" enctype="multipart/form-data" id="detect-form">
+        <div class="panel-heading"><span class="step">01</span><div><h2>Choose a fundus image</h2><p>JPG, JPEG, or PNG · up to 10 MB</p></div></div>
+        <label class="dropzone" for="image-input" id="dropzone">
+          <input type="file" name="image" id="image-input" accept="image/jpeg,image/png" required>
+          <span class="upload-icon">↑</span>
+          <strong id="file-label">Drop an image here</strong>
+          <span id="file-hint">or browse from your device</span>
+        </label>
+        <div class="preview-wrap" id="preview-wrap" hidden><img id="preview" alt="Selected image preview"></div>
+        <button class="primary-button" type="submit" id="submit-button"><span>Predict lesions</span><span class="button-arrow">↗</span></button>
+      </form>
+
+      <aside class="info-panel">
+        <div class="panel-heading"><span class="step">02</span><div><h2>What you’ll receive</h2><p>Instant visual results</p></div></div>
+        <div class="feature-list">
+          <div class="feature"><span class="feature-number">A</span><div><strong>Bordered lesions</strong><p>Every detected region is outlined on the result image.</p></div></div>
+          <div class="feature"><span class="feature-number">B</span><div><strong>Detection summary</strong><p>Review counts and confidence for each lesion class.</p></div></div>
+          <div class="feature"><span class="feature-number">C</span><div><strong>Downloadable output</strong><p>Keep the annotated image for your records.</p></div></div>
+        </div>
+        <div class="note"><span>i</span><p>This system is an AI-based research prototype for retinal lesion detection and is not a substitute for professional medical diagnosis.</p></div>
+      </aside>
+    </section>
+
+    {% if result %}
+    <section class="results" aria-live="polite">
+      <div class="results-header"><div><p class="eyebrow">Analysis complete</p><h2>Detected retinal lesions</h2></div><a class="download-button" href="{{ result.download_url }}">↓ <span>Download Result</span></a></div>
+      <div class="result-grid">
+        <figure class="image-card"><figcaption><span>Original fundus image</span><small>{{ result.filename }}</small></figcaption><img src="{{ result.original_url }}" alt="Original uploaded retinal fundus image"></figure>
+        <figure class="image-card annotated"><figcaption><span>Annotated prediction</span><small>{{ result.total }} detected</small></figcaption><img src="{{ result.image_url }}" alt="Retinal image with colored lesion detection boxes"></figure>
+      </div>
+      <div class="summary-table"><h3>Detection Summary</h3>{% for class_id, info in class_info.items() %}<div class="summary-row"><span class="swatch" style="background: rgb{{ info.color }}"></span><strong>{{ info.name }}</strong><span>{{ result.summary[class_id].count }}</span><small>{% if result.summary[class_id].count %}Avg {{ '%.1f'|format(result.summary[class_id].average * 100) }}% · High {{ '%.1f'|format(result.summary[class_id].highest * 100) }}%{% else %}No detections{% endif %}</small></div>{% endfor %}<div class="total-row"><strong>Total lesions</strong><strong>{{ result.total }}</strong></div>{% if not result.total %}<p class="no-findings">No lesions detected above the current confidence threshold.</p>{% endif %}</div>
+      <a class="secondary-button" href="{{ url_for('index') }}">Upload Another Image</a>
+    </section>
+    {% endif %}
+
+    <footer><span>LESION LENS / 2026</span><span>Powered by YOLO detection</span></footer>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

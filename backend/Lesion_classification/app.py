@@ -1,0 +1,176 @@
+from __future__ import annotations
+
+import os
+import uuid
+from pathlib import Path
+
+from flask import Flask, flash, redirect, render_template, request, send_from_directory, url_for
+from PIL import Image, ImageDraw, UnidentifiedImageError
+from werkzeug.utils import secure_filename
+import torch
+from ultralytics import YOLO
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+MODEL_PATH = BASE_DIR / "best.pt"
+UPLOAD_DIR = BASE_DIR / "uploads"
+RESULT_DIR = STATIC_DIR / "results"
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
+CLASS_INFO = {
+    0: {"name": "Microaneurysm", "short": "MA", "color": (255, 0, 0)},
+    1: {"name": "Haemorrhage", "short": "HE", "color": (0, 0, 255)},
+    2: {"name": "Hard Exudate", "short": "EX", "color": (0, 255, 0)},
+    3: {"name": "Soft Exudate", "short": "SE", "color": (255, 255, 0)},
+}
+
+UPLOAD_DIR.mkdir(exist_ok=True)
+RESULT_DIR.mkdir(exist_ok=True)
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "lesion-detection-local")
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+model: YOLO | None = None
+MODEL_ERROR: str | None = None
+if MODEL_PATH.exists():
+    try:
+        model = YOLO(str(MODEL_PATH))
+    except Exception as error:
+        MODEL_ERROR = str(error)
+else:
+    MODEL_ERROR = f"Model file not found: {MODEL_PATH.name}"
+
+
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def class_name(names: object, class_id: int) -> str:
+    if isinstance(names, dict):
+        return str(names.get(class_id, "Lesion"))
+    if isinstance(names, list) and 0 <= class_id < len(names):
+        return str(names[class_id])
+    return "Lesion"
+
+
+@app.errorhandler(413)
+def file_too_large(_error):
+    flash("That image is larger than 10 MB. Please choose a smaller file.", "error")
+    return redirect(url_for("index"))
+
+
+@app.get("/")
+def index():
+    return render_template("index.html")
+
+
+@app.post("/predict")
+def predict():
+    uploaded_file = request.files.get("image")
+    if uploaded_file is None or not uploaded_file.filename:
+        flash("Choose an image before running detection.", "error")
+        return redirect(url_for("index"))
+
+    if not allowed_file(uploaded_file.filename):
+        flash("Use a JPG, JPEG, or PNG image.", "error")
+        return redirect(url_for("index"))
+
+    if model is None:
+        flash(MODEL_ERROR or "The YOLO model could not be loaded.", "error")
+        return redirect(url_for("index"))
+
+    request_id = uuid.uuid4().hex
+    extension = Path(secure_filename(uploaded_file.filename)).suffix.lower() or ".jpg"
+    original_name = f"{request_id}{extension}"
+    original_path = UPLOAD_DIR / original_name
+    result_path = RESULT_DIR / f"{request_id}.jpg"
+
+    try:
+        with Image.open(uploaded_file) as image:
+            image = image.convert("RGB")
+            if extension == ".png":
+                image.save(original_path, format="PNG", optimize=True)
+            else:
+                image.save(original_path, format="JPEG", quality=95, subsampling=0)
+            prediction = model.predict(
+                source=str(original_path), imgsz=1024, conf=0.25, iou=0.50,
+                max_det=1000, device=DEVICE, verbose=False,
+            )[0]
+            annotated = draw_annotations(image, prediction)
+            annotated.save(result_path, format="JPEG", quality=95, subsampling=0)
+
+        summary = {class_id: {"count": 0, "average": 0.0, "highest": 0.0} for class_id in CLASS_INFO}
+        for box in prediction.boxes:
+            class_id = int(box.cls[0].item())
+            confidence = float(box.conf[0].item())
+            if class_id in summary:
+                summary[class_id]["count"] += 1
+                summary[class_id]["average"] += confidence
+                summary[class_id]["highest"] = max(summary[class_id]["highest"], confidence)
+        for values in summary.values():
+            if values["count"]:
+                values["average"] /= values["count"]
+    except (UnidentifiedImageError, OSError):
+        original_path.unlink(missing_ok=True)
+        result_path.unlink(missing_ok=True)
+        flash("The selected file could not be read as an image.", "error")
+        return redirect(url_for("index"))
+    except Exception as error:
+        original_path.unlink(missing_ok=True)
+        result_path.unlink(missing_ok=True)
+        app.logger.exception("Detection failed: %s", error)
+        flash("Detection could not be completed. Check that the YOLO model is valid.", "error")
+        return redirect(url_for("index"))
+
+    return render_template(
+        "index.html",
+        result={
+            "original_url": url_for("static", filename=f"uploads/{original_name}"),
+            "image_url": url_for("result_image", filename=f"{request_id}.jpg"),
+            "download_url": url_for("download_result", filename=f"{request_id}.jpg"),
+            "filename": secure_filename(uploaded_file.filename),
+            "summary": summary,
+            "total": sum(item["count"] for item in summary.values()),
+        },
+        class_info=CLASS_INFO,
+        device=DEVICE,
+    )
+
+
+def draw_annotations(image: Image.Image, prediction) -> Image.Image:
+    """Draw uncluttered lesion boxes and a compact legend on the fundus image."""
+    annotated = image.copy().convert("RGB")
+    draw = ImageDraw.Draw(annotated)
+    for box in prediction.boxes:
+        class_id = int(box.cls[0].item())
+        if class_id in CLASS_INFO:
+            coordinates = [round(value) for value in box.xyxy[0].tolist()]
+            draw.rectangle(coordinates, outline=CLASS_INFO[class_id]["color"], width=3)
+
+    padding = 12
+    row_height = 24
+    legend_width = 205
+    legend_height = padding * 2 + row_height * len(CLASS_INFO)
+    left = annotated.width - legend_width - 12
+    top = 12
+    draw.rectangle((left, top, annotated.width - 12, top + legend_height), fill=(255, 255, 255))
+    for row, info in enumerate(CLASS_INFO.values()):
+        y = top + padding + row * row_height + 5
+        draw.rectangle((left + padding, y, left + padding + 14, y + 14), fill=info["color"])
+        draw.text((left + padding + 23, y - 2), f'{info["short"]} - {info["name"]}', fill=(25, 35, 45))
+    return annotated
+
+
+@app.get("/result/<filename>")
+def result_image(filename):
+    return send_from_directory(RESULT_DIR, secure_filename(filename))
+
+
+@app.get("/download/<filename>")
+def download_result(filename):
+    return send_from_directory(RESULT_DIR, secure_filename(filename), as_attachment=True, download_name="annotated-retinal-lesions.jpg")
+
+
+if __name__ == "__main__":
+    app.run(debug=True)

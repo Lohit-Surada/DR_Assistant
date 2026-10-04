@@ -1,0 +1,31 @@
+# Dependencies and virtual environments
+node_modules/
+**/.venv/
+**/venv/
+__pycache__/
+*.py[cod]
+
+# Local configuration and generated files
+.env
+.env.*
+*.log
+*.sqlite3
+dist/
+build/
+
+# Uploaded and generated media
+**/uploads/
+**/results/
+
+# Large local datasets and trained model artifacts
+Datasets/
+*.keras
+*.pt
+*.pth
+*.h5
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
