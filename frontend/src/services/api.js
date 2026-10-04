@@ -1,7 +1,4 @@
 export const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-export const VITE_LESION_DETECTION_URL =
-  import.meta.env.VITE_LESION_DETECTION_URL || 'http://localhost:5000';
-
 export async function classifyImage(file) {
   const formData = new FormData();
   formData.append('image', file);
@@ -17,6 +14,57 @@ export async function classifyImage(file) {
   }
 
   return data;
+}
+
+function resolveMediaUrl(path) {
+  return new URL(path, `${VITE_API_BASE_URL}/`).toString();
+}
+
+export async function generateGradCAM(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const response = await fetch(`${VITE_API_BASE_URL}/api/gradcam/`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to generate the Grad-CAM visualization.');
+  }
+
+  return {
+    ...data,
+    results: Object.fromEntries(
+      Object.entries(data.results || {}).map(([key, path]) => [key, resolveMediaUrl(path)]),
+    ),
+  };
+}
+
+export async function detectLesions(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const response = await fetch(`${VITE_API_BASE_URL}/api/lesions/`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to detect retinal lesions.');
+  }
+
+  return {
+    ...data,
+    result: {
+      ...data.result,
+      original_url: resolveMediaUrl(data.result.original_url),
+      image_url: resolveMediaUrl(data.result.image_url),
+      download_url: resolveMediaUrl(data.result.download_url),
+    },
+  };
 }
 
 const mockDelay = (callback, delay = 450) =>

@@ -16,6 +16,7 @@ build/
 # Uploaded and generated media
 **/uploads/
 **/results/
+backend/media/
 
 # Large local datasets and trained model artifacts
 Datasets/

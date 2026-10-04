@@ -1,38 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { saveAnalysis, subscribeToUserAnalyses } from '../services/analysisStore';
-import { classifyImage } from '../services/api';
-
-const defaultGradCamResults = [
-  {
-    key: 'input',
-    title: 'Input Fundus',
-    description: 'Original retinal fundus image provided for analysis.',
-    image:
-      'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    key: 'gradcam',
-    title: 'True Grad-CAM',
-    description: 'Highlights image regions that contributed to the selected model prediction.',
-    image:
-      'https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    key: 'attention',
-    title: 'Retinal Attention Map',
-    description: 'Visual representation of regions emphasized by the retinal image processing pipeline.',
-    image:
-      'https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    key: 'feature',
-    title: 'YOLO26 Feature Visualization',
-    description: 'Visualization of internal model feature representations.',
-    image:
-      'https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&w=900&q=80',
-  },
-];
+import { classifyImage, generateGradCAM } from '../services/api';
 
 const AnalysisContext = createContext(null);
 
@@ -42,7 +11,10 @@ export function AnalysisProvider({ children }) {
   const [imageName, setImageName] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [classificationResult, setClassificationResult] = useState(null);
-  const [gradCamResults, setGradCamResults] = useState(defaultGradCamResults);
+  const [gradCamResults, setGradCamResults] = useState([]);
+  const [gradCamCombined, setGradCamCombined] = useState('');
+  const [gradCamStatus, setGradCamStatus] = useState('idle');
+  const [gradCamError, setGradCamError] = useState('');
   const [reportAvailable, setReportAvailable] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState([]);
   const [historyError, setHistoryError] = useState('');
@@ -71,12 +43,41 @@ export function AnalysisProvider({ children }) {
     setImageName(file.name);
     setImagePreview(previewUrl);
     setClassificationResult(null);
-    setGradCamResults(defaultGradCamResults);
+    setGradCamResults([]);
+    setGradCamCombined('');
+    setGradCamStatus('classifying');
+    setGradCamError('');
     setReportAvailable(false);
 
     const result = await classifyImage(file);
     setClassificationResult(result);
     setReportAvailable(true);
+
+    setGradCamStatus('generating');
+    let visualization;
+    try {
+      visualization = await generateGradCAM(file);
+    } catch (error) {
+      setGradCamStatus('error');
+      setGradCamError(error.message || 'Unable to generate the Grad-CAM visualization.');
+      throw error;
+    }
+    const panelDefinitions = [
+      ['input', 'Input Fundus', 'Original retinal fundus image provided for analysis.', 'input_fundus'],
+      ['gradcam', 'True YOLO26 Grad-CAM', 'Regions contributing to the model prediction.', 'gradcam'],
+      ['attention', 'Retinal Attention Map', 'CLAHE and local-contrast retinal attention visualization.', 'attention'],
+      ['feature', 'YOLO26 Feature Visualization', 'Visualization of internal model feature representations.', 'feature_visualization'],
+    ];
+    setGradCamResults(
+      panelDefinitions.map(([key, title, description, resultKey]) => ({
+        key,
+        title,
+        description,
+        image: visualization.results[resultKey],
+      })),
+    );
+    setGradCamCombined(visualization.results.combined);
+    setGradCamStatus('ready');
 
     if (currentUser?.id || currentUser?.email) {
       saveAnalysis({
@@ -100,6 +101,10 @@ export function AnalysisProvider({ children }) {
     setImageName('');
     setImagePreview('');
     setReportAvailable(false);
+    setGradCamResults([]);
+    setGradCamCombined('');
+    setGradCamStatus('idle');
+    setGradCamError('');
   }, [imagePreview]);
 
   const value = useMemo(
@@ -109,6 +114,9 @@ export function AnalysisProvider({ children }) {
       imagePreview,
       classificationResult,
       gradCamResults,
+      gradCamCombined,
+      gradCamStatus,
+      gradCamError,
       reportAvailable,
       analysisHistory,
       historyError,
@@ -118,7 +126,7 @@ export function AnalysisProvider({ children }) {
       setGradCamResults,
       setReportAvailable,
     }),
-    [uploadedImage, imageName, imagePreview, classificationResult, gradCamResults, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
+    [uploadedImage, imageName, imagePreview, classificationResult, gradCamResults, gradCamCombined, gradCamStatus, gradCamError, reportAvailable, analysisHistory, historyError, setImageFile, clearImage],
   );
 
   return <AnalysisContext.Provider value={value}>{children}</AnalysisContext.Provider>;
